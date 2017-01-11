@@ -17,12 +17,17 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Locale;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class ReportChargeService extends Service {
     private final BroadcastReceiver batteryChargeBroadcastReceiver = new BatteryChargeBroadcastReceiver(this);
     private static final String logTag = ReportChargeService.class.getSimpleName();
+
+    private Intent batteryStatus;
+    private Timer timer;
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -31,19 +36,23 @@ public class ReportChargeService extends Service {
         Log.i(logTag, "Service started");
 
         IntentFilter batteryChangedFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
-        Intent batteryStatus = registerReceiver(batteryChargeBroadcastReceiver, batteryChangedFilter);
+        batteryStatus = registerReceiver(batteryChargeBroadcastReceiver, batteryChangedFilter);
 
-        reportBatteryState(batteryStatus);
+        startTimer();
 
         return START_STICKY;
     }
 
     @Override
     public void onDestroy() {
+        stopTimer();
+
         // TODO: Can this identifier be saved in a location accessible from both manifest and here?
         Intent restartIntent = new Intent("in.futuretech.android.reportbatterycharge.RESTART_SERVICE");
         sendBroadcast(restartIntent);
         unregisterReceiver(batteryChargeBroadcastReceiver);
+
+        batteryStatus = null;
 
         Log.i(logTag, "Service destroyed");
         super.onDestroy();
@@ -52,6 +61,10 @@ public class ReportChargeService extends Service {
     @Override
     public IBinder onBind(Intent intent) {
         return null;
+    }
+
+    private void reportBatteryState() {
+        reportBatteryState(batteryStatus);
     }
 
     private void reportBatteryState(Intent intent) {
@@ -65,6 +78,28 @@ public class ReportChargeService extends Service {
     private String getDeviceId() {
         // To identify the device when multiple devices are reporting to the same service
         return Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
+    }
+
+    private void startTimer() {
+        final ReportChargeService that = this;
+
+        timer = new Timer();
+        TimerTask timerTask = new TimerTask() {
+            @Override
+            public void run() {
+                that.reportBatteryState();
+            }
+        };
+
+        // Also report charge level every 15 minutes, regardless of changes
+        timer.schedule(timerTask, 0, 15 * 60 * 1000);
+    }
+
+    private void stopTimer() {
+        if (timer != null) {
+            timer.cancel();
+            timer = null;
+        }
     }
 
     private class BatteryChargeBroadcastReceiver extends BroadcastReceiver {
