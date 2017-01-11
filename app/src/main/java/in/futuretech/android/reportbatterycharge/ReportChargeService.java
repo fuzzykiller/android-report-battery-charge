@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -55,7 +56,7 @@ public class ReportChargeService extends Service {
 
     private void reportBatteryState(Intent intent) {
         ReportChargeTaskParams taskParams = new ReportChargeTaskParams(intent, getDeviceId());
-        Log.i(logTag, "Current charge level: " + taskParams.ChargePercent + " (" + (taskParams.IsCharging ? "" : "NOT ") + "charging)");
+        Log.i(logTag, String.format("Current charge level: %f (Charging: %b)", taskParams.ChargePercent, taskParams.IsCharging));
 
         new ReportChargeTask().execute(taskParams);
     }
@@ -104,17 +105,22 @@ public class ReportChargeService extends Service {
             ReportChargeTaskParams actualParams = params[0];
 
             try {
-                URL url = new URL("http://192.168.2.5/report-charge/report.php?charge="
-                        + actualParams.ChargePercent + "&charging=" + actualParams.IsCharging);
+                URL url = new URL(
+                        String.format((Locale)null,
+                                "http://192.168.2.5/report-charge/report.php?device=%s&charge=%f&charging=%b",
+                                actualParams.DeviceId,
+                                actualParams.ChargePercent,
+                                actualParams.IsCharging));
+
                 HttpURLConnection connection = (HttpURLConnection) url.openConnection();
                 try {
                     int responseCode = connection.getResponseCode();
                     if (responseCode < 200) {
-                        Log.w(logTag, "Report service unexpected response code: " + responseCode);
+                        Log.w(logTag, String.format("Report service unexpected response code: %d", responseCode));
                     } else if (responseCode < 400) {
-                        Log.i(logTag, "Report service response code: " + responseCode);
+                        Log.i(logTag, String.format("Report service response code: %d", responseCode));
                     } else {
-                        Log.w(logTag, "Report service error code: " + responseCode);
+                        Log.w(logTag, String.format("Report service error code: %d", responseCode));
                     }
                 } finally {
                     connection.disconnect();
